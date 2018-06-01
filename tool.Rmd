@@ -1,0 +1,80 @@
+---
+title: "wrangleMapR"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(stringr)
+#library(lazyeval)
+
+get_file <-
+    read_file("test.Rmd")
+
+make_edits <-
+    get_file %>% 
+    str_replace_all(" +"," ") %>% 
+    str_replace_all("\\n(#.*)\\r", "") %>% #single line comments
+    str_replace_all("(\\%\\>\\%|,)( #.*)", "\\1 ") %>% #inline comments
+    str_replace_all("(\\<\\-)[ \r\n]+", "\\1 ") %>% #assignments
+    str_replace_all("(\\%\\>\\%)[ \r\n]+", "\\1 ") %>% #dplyr pipe
+    str_replace_all("(\\+)[ \r\n]+", "\\1 ") %>% #ggplot pipe
+    str_replace_all("(\\{)[ \r\n]+", "\\1 ") %>% #open bracket
+    str_replace_all("[ \r\n]+(\\})", "\\1 ") #move close bracket up
+    
+out_file <-
+    tibble(text = read_lines(make_edits)) %>% 
+    filter(str_detect(text, "<-") |
+           str_detect(text, "^library")) 
+
+file_details <-
+    out_file %>% 
+    mutate(line = row_number()) %>% 
+    mutate(verbs = str_extract_all(text,
+                        "(mutate|summari[sz]e|count|filter|gather|spread|rbind|.*_join)\\("),
+           verbs = str_replace(verbs, "^c\\(", ""),
+           verbs = str_replace_all(verbs, "\\(|\\)", ""),
+           creation = ifelse(str_detect(text, "\\<\\-"),
+                             str_replace(text, "(.*) \\<\\-.*", "is(\\1)"),
+                             NA)) %>% 
+    #unnest(verbs2 = str_split(verbs, ",")) %>% 
+    group_by(line) %>% 
+    mutate(ord = row_number()) %>% 
+    ungroup()
+
+file_details
+
+make_file <- 
+    paste0(out_file$text, collapse = "\r\n") %>% 
+    paste("\r\n")
+    
+
+write_file(make_file, "output.R")
+ 
+
+```
+  
+  
+```{r}
+source_lines <- function(x){
+    source(textConnection(x))
+}
+
+i = 4
+source_lines(file_details$text[i])
+
+get_type <- 
+    source_lines(file_details$creation[i])
+
+
+get_type$value %>% 
+    paste0(collapse = "|") %>% 
+    str_extract("data.frame|function|character|numeric|^list")
+
+
+```
+
