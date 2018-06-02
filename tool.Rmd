@@ -9,11 +9,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(tidyverse)
-library(stringr)
+#library(stringr)
 #library(lazyeval)
 
-get_file <-
-    read_file("test.Rmd")
+get_file <- read_file("test.Rmd")
 
 make_edits <-
     get_file %>% 
@@ -21,6 +20,7 @@ make_edits <-
     str_replace_all("\\n(#.*)\\r", "") %>% #single line comments
     str_replace_all("(\\%\\>\\%|,)( #.*)", "\\1 ") %>% #inline comments
     str_replace_all("(\\<\\-)[ \r\n]+", "\\1 ") %>% #assignments
+    str_replace_all("(,)[ \r\n]+", "\\1 ") %>% #commas
     str_replace_all("(\\%\\>\\%)[ \r\n]+", "\\1 ") %>% #dplyr pipe
     str_replace_all("(\\+)[ \r\n]+", "\\1 ") %>% #ggplot pipe
     str_replace_all("(\\{)[ \r\n]+", "\\1 ") %>% #open bracket
@@ -40,7 +40,8 @@ file_details <-
            verbs = str_replace_all(verbs, "\\(|\\)", ""),
            creation = ifelse(str_detect(text, "\\<\\-"),
                              str_replace(text, "(.*) \\<\\-.*", "is(\\1)"),
-                             NA)) %>% 
+                             NA),
+           is = "") %>% 
     #unnest(verbs2 = str_split(verbs, ",")) %>% 
     group_by(line) %>% 
     mutate(ord = row_number()) %>% 
@@ -52,29 +53,76 @@ make_file <-
     paste0(out_file$text, collapse = "\r\n") %>% 
     paste("\r\n")
     
-
 write_file(make_file, "output.R")
- 
-
 ```
   
   
 ```{r}
-source_lines <- function(x){
-    source(textConnection(x))
-}
+i = 3
 
-i = 4
-source_lines(file_details$text[i])
+eval(parse(text = file_details$text[i]))
 
 get_type <- 
-    source_lines(file_details$creation[i])
+    #source(file_details$creation[i])
+    eval(parse(text = file_details$creation[i]))
 
 
-get_type$value %>% 
-    paste0(collapse = "|") %>% 
-    str_extract("data.frame|function|character|numeric|^list")
+x <- 
+    get_type %>% 
+    paste0(collapse = "|")
+
+#file_details$is[i] <-
+    case_when(str_detect(x, "data.frameRowLabels") ~ "vector",
+              str_detect(x, "^list") ~ "list",
+              str_detect(x, "tbl|DT|data.frame") ~ "table",
+              str_detect(x, "vector|POSIX") ~ "constant",
+              str_detect(x, "function") ~ "function",
+              TRUE ~ as.character(get_type[1]))
 
 
+get_fx_pkg <-
+    tibble(pkg = search()) %>% 
+    filter(str_detect(pkg, "package")) %>% 
+    rowwise() %>% 
+    mutate(fx = list(as.character(ls.str(pkg)))) %>% 
+    ungroup() %>% 
+    unnest(fx) %>% 
+    filter(str_detect(tolower(fx), "^[a-z]")) %>% 
+    distinct(fx) %>% 
+    .$fx #mutate(src = "pkg")
+
+get_fx_local <-
+    tibble(fx = list(as.character(lsf.str(search())))) %>% 
+    unnest(fx) %>% 
+    .$fx #mutate(src = "local")
+
+get_fx <-
+    c(get_fx_pkg, get_fx_local)
+
+get_objects <-
+    tibble(obj = list(as.character(ls.str(search())))) %>% 
+    unnest(obj) %>% 
+    filter(!obj %in% get_fx_local) %>% 
+    .$obj
+
+parse_df <-
+    getParseData(
+        parse(text = file_details$text[i])
+    ) %>% 
+    as.tibble() %>%
+    mutate(step = i) %>% 
+    select(step, parent:text) %>% 
+    filter(terminal == T,
+           str_detect(token, "SYMBOL"),
+           !str_detect(token, "SYMBOL_FUNCTION_CALL")) %>% 
+    #group_by(text) %>% mutate(first = first(token)) %>% ungroup() %>% 
+    mutate(final = 
+               case_when(row_number() == 1 ~ "new object",
+                         str_detect(token, "SUB") ~ "new column" ,
+                         text %in% get_fx ~ "from libary", #ls("package:datasets")
+                         text %in% get_objects ~ "obj dependency",
+                         TRUE ~ "")) %>% 
+    filter(final != "")
 ```
+
 
