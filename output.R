@@ -1,7 +1,6 @@
 library(tidyverse)
-a <- mpg %>% mutate(length = nchar(model)) %>% filter(length < 10) %>% group_by(manufacturer) %>% count(model) %>% ungroup()
-b <- function(x) { if(1 == 1){ 1}  else { 2} } 
-n <- c(2, 3, 5) 
-s <- c("aa", "bb", "cc", "dd", "ee") 
-b <- c(TRUE, FALSE, TRUE, FALSE, FALSE) 
-x <- list(n, s, b, 3) 
+model_name <- "a4"
+a <- mpg %>% mutate(ideal = model_name) %>% filter(model == ideal) %>% group_by(manufacturer) %>% count(cyl) %>% ungroup()
+fn <- function(x) { if(1 == 1){ 1}  else { 2} } 
+p <- paste0("here is one string of text", fn, "another string of text")
+x <- list(c(2, 3, 5), c("aa", "bb", "cc", "dd", "ee"), c(TRUE, FALSE, TRUE, FALSE, FALSE), 3) 
