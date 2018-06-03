@@ -9,10 +9,12 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(tidyverse)
+library(scales)
+library(ggrepel)
 #library(stringr)
 #library(lazyeval)
 
-get_file <- read_file("test.Rmd")
+get_file <- read_file("trump staff vs obama.R")
 
 make_edits <-
     get_file %>% 
@@ -25,8 +27,8 @@ make_edits <-
     #str_replace_all(",\\s*\\)", ")") %>% #remove leading comma at end ex: (obj,)
     str_replace_all("(\\%\\>\\%)[ \r\n]+", "\\1 ") %>% #dplyr pipe
     str_replace_all("(\\+)[ \r\n]+", "\\1 ") %>% #ggplot pipe
-    str_replace_all("(\\{)[ \r\n]+", "\\1 ") %>% #open bracket
-    str_replace_all("[ \r\n]+(\\})", "\\1 ") #move close bracket up
+    str_replace_all("([\\{\\(]+)[ \r\n]+", "\\1 ") %>% #open bracket/parens
+    str_replace_all("[ \r\n]+([\\}\\)]+)", "\\1 ") #move close bracket/parens up
     
 out_file <-
     tibble(text = read_lines(make_edits)) %>% 
@@ -59,46 +61,8 @@ write_file(make_file, "output.R")
 parse_it <- function(get_line){
     #run the line
         eval(parse(text = file_details$text[get_line]), envir = .GlobalEnv)
-    
-    #single column manipulation (dplyr pipe opportunity)
-        assignment_pattern <- "^\\w+\\$\\w+ \\<-" #ex: "mpg$cyl <- 2"
-    
-    if(str_detect(file_details$text[get_line], assignment_pattern)){
-        tibble(step = get_line,
-               text = str_extract(file_details$text[get_line], assignment_pattern),
-               final = "single column manipulation")
-        
-    #libraries            
-    } else if(str_detect(file_details$text[get_line], "^library")){
-        tibble(step = get_line,
-               text = file_details$text[get_line],
-               final = "load library")
-        
-    #functions            
-    } else if(str_detect(file_details$text[get_line], "\\<- function\\(")){
-        tibble(step = get_line,
-               text = str_extract(file_details$text[get_line], "\\w+"),
-               final = "function")
-        
-    #main funciton        
-    } else {
-        #get_line = 2
-        get_type <- 
-            #source(file_details$creation[i])
-            eval(parse(text = file_details$creation[get_line]), envir =  .GlobalEnv)
-        
-        x <- 
-            get_type %>% 
-            paste0(collapse = "|")
-        
-        file_details$is[get_line] <-
-            case_when(str_detect(x, "data.frameRowLabels") ~ "vector",
-                      str_detect(x, "^list") ~ "list",
-                      str_detect(x, "tbl|DT|data.frame") ~ "table",
-                      str_detect(x, "vector|POSIX") ~ "constant",
-                      str_detect(x, "function") ~ "function",
-                      TRUE ~ as.character(get_type[1]))
-        
+
+    #identify functions
         get_fx_pkg <-
             tibble(pkg = search()) %>% 
             filter(str_detect(pkg, "package")) %>% 
@@ -115,8 +79,7 @@ parse_it <- function(get_line){
             unnest(fx) %>% 
             .$fx #mutate(src = "local")
         
-        get_fx <-
-            c(get_fx_pkg, get_fx_local)
+        #get_fx <- c(get_fx_pkg, get_fx_local)
         
         get_objects <-
             tibble(obj = list(as.character(ls.str(search())))) %>% 
@@ -124,7 +87,74 @@ parse_it <- function(get_line){
             filter(!obj %in% get_fx_local) %>% 
             .$obj
         
-        #parse_df <-
+    #make dataframe of found functions
+        local_fx_list <- paste0(paste0(get_fx_local,'\\('), collapse = "|")
+
+        fx_found <- str_detect(file_details$text[get_line], local_fx_list)
+
+        if(fx_found){
+            fx_df <-
+                tibble(step = get_line,
+                       text = (str_extract_all(file_details$text[get_line], local_fx_list)),
+                       final = "local function") %>%
+                rowwise() %>% 
+                unnest(text) %>% 
+                mutate(text = str_replace(text, "\\(", ""))
+        }
+
+    #pattern to identify single column manipulation
+        assignment_pattern <- "^\\w+\\$\\w+ \\<-" #ex: "mpg$cyl <- 2"
+        
+    #use mutate
+    if(str_detect(file_details$text[get_line], assignment_pattern)){
+            file_details$is[get_line] <<- "use mutate?"
+    
+            df <-
+                tibble(step = get_line,
+                       text = str_extract(file_details$text[get_line], "\\w+\\$\\w+"),
+                       final = "single column manipulation") %>% 
+                rbind(
+                    tibble(step = get_line,
+                           text = str_extract(file_details$text[get_line], "\\w+"),
+                           final = "obj dependency")
+                    )
+
+    #libraries            
+    } else if(str_detect(file_details$text[get_line], "^library")){
+        file_details$is[get_line] <<- "library"
+        
+        df <-
+            tibble(step = get_line,
+                   text = file_details$text[get_line],
+                   final = "load library")
+        
+    #functions            
+    } else if(str_detect(file_details$text[get_line], "\\<- function\\(")){
+        file_details$is[get_line] <<- "function"
+
+        df <-
+            tibble(step = get_line,
+                   text = str_extract(file_details$text[get_line], "\\w+"),
+                   final = "function")
+
+    #main funciton        
+    } else {
+        #get_line = 2
+        get_type <- 
+            #file_details$creation is an 'is()' statement
+            eval(parse(text = file_details$creation[get_line])) 
+        
+        x <- 
+            get_type %>% 
+            paste0(collapse = "|")
+        
+        file_details$is[get_line] <<-
+            case_when(str_detect(x, "^list") ~ "list",
+                      str_detect(x, "tbl|DT") ~ "table",
+                      str_detect(x, "vector|POSIX") ~ "constant",
+                      TRUE ~ as.character(get_type[1]))
+        
+        df <-
             getParseData(
                 parse(text = file_details$text[get_line])
             ) %>% 
@@ -132,19 +162,25 @@ parse_it <- function(get_line){
             mutate(step = get_line) %>% 
             select(step, parent:text) %>% 
             filter(terminal == T,
-                   str_detect(token, "SYMBOL"),
-                   !str_detect(token, "SYMBOL_FUNCTION_CALL")) %>% 
+                   str_detect(token, "SYMBOL")) %>% 
+            filter((!str_detect(token, "SYMBOL_FUNCTION_CALL") | text %in% get_fx_local)) %>% 
             #group_by(text) %>% mutate(first = first(token)) %>% ungroup() %>% 
             mutate(final = 
                        case_when(row_number() == 1 ~ "new object",
                                  str_detect(token, "SUB") ~ "new column",
-                                 text %in% get_fx ~ "from libary",
+                                 text %in% get_fx_pkg ~ "from libary",
+                                 text %in% get_fx_local ~ "local function",
                                  #ls("package:datasets")
                                  text %in% get_objects ~ "obj dependency",
                                  TRUE ~ "")) %>% 
             filter(final != "") %>% 
-            select(step, text, final)
+            select(step, text, final)%>%
+            distinct()
     }
+
+    if(fx_found){ df <- rbind(df, fx_df) }
+        
+    return(df)
 }
 
 ```
@@ -155,7 +191,117 @@ parse_df <-
 
 for(i in 2:nrow(file_details)){
     parse_df <- rbind(parse_df, parse_it(i))
+    print(i)
 }
+
+```
+
+```{r}
+prep_plot <-
+    parse_df %>% 
+    mutate(obj = ifelse(str_detect(final, "obj"), "obj", final),
+           plot = ifelse(str_detect(final, "lib|obj|func"), "plot", "detail")) %>% 
+    group_by(step) %>% 
+    mutate(dir = ifelse(row_number() == 1, "output", "input")) %>% 
+    ungroup()
+
+prep_plot
+
+get_outputs <-
+    prep_plot %>% 
+    filter(dir == "output") %>%
+    select(step, output = text, create = obj)
+
+get_inputs <-
+    prep_plot %>% 
+    filter(dir == "input",
+           plot == "plot") %>% 
+    select(step, input = text, type = obj) %>% 
+    left_join(get_outputs %>% select(input = output, input_step = step)) %>% 
+    left_join(file_details %>% select(input_step = line, input_detail = text, input_is = is))
+    
+
+order_outputs <- 
+    c("library", "list", "constant", "function", "table", "use mutate?", "unused") %>%
+    .[. %in% file_details$is]
+
+order_inputs <- 
+    as.character(c("list", "constant", "function", "table", "unused")) %>%
+    .[. %in% get_inputs$input_is]
+
+
+final_plot <-
+    get_outputs%>% 
+    full_join(get_inputs, by = "step") %>% 
+    left_join(file_details %>% select(step = line, detail = text, is)) %>% 
+    mutate(is = factor(is, ordered = T) %>% fct_relevel(order_outputs),
+           input_is = factor(input_is, ordered = T) %>% fct_relevel(order_inputs)) %>% 
+    mutate(is_color = 
+               case_when(is == "library" ~ "khaki1",
+                         is == "constant" ~ "skyblue1",
+                         is == "table" ~ "turquoise3",
+                         is == "function" ~ "violet",
+                         is == "use mutate?" ~ "chocolate1",
+                         is == "list" ~ "grey75",
+                         TRUE ~ "grey75")) %>% 
+    mutate(input_is_color = 
+               case_when(input_is == "library" ~ "khaki1",
+                         input_is == "constant" ~ "skyblue1",
+                         input_is == "table" ~ "turquoise3",
+                         input_is == "function" ~ "violet",
+                         input_is == "use mutate?" ~ "chocolate1",
+                         input_is == "list" ~ "grey75",
+                         TRUE ~ "grey75"))
+        
+get_curve <-
+    final_plot %>% 
+    filter(step != input_step) %>% 
+    mutate(curve = ifelse((input_is == "table"), "up", "down"))
+
+#p <-
+ggplot(final_plot, aes(x = factor(step), y = is)) +
+    #geom_count() +
+    geom_curve(data = filter(get_curve, curve == "up"),
+               aes(x = factor(input_step), y = input_is, 
+                   xend = step, yend = is,
+                   color = input_is_color),
+               curvature = -0.25,
+               #arrow = arrow(length = unit(0.4,"cm"), type = "closed"),
+               #arrow = arrow(length = unit(0.2, "cm"), type = "open"),
+               size = 1) +
+    geom_curve(data = filter(get_curve, curve == "down"),
+               aes(x = factor(input_step), y = input_is, 
+                   xend = step, yend = is,
+                   color = input_is_color),
+               curvature = 0.25,
+               #arrow = arrow(length = unit(0.4,"cm"), type = "closed"),
+               #arrow = arrow(length = unit(0.2, "cm"), type = "open"),
+               size = 1) +
+    geom_label(data = distinct(final_plot, output, is, step, is_color),
+               aes(label = output, fill = is_color),
+               nudge_x = -0.1, nudge_y = 0.1, #alpha = 0.9,
+               label.padding = unit(0.4, "lines")) +
+    #geom_label(aes(label = output, color = is), vjust = 0.1, hjust = -0.1) +
+    #expand_limits(x = c(-0.5, nrow(file_details) + 2)) +
+    #expand = expand_scale(mult = c(0, .1)))
+    scale_color_identity() +
+    scale_fill_identity() +
+    scale_y_discrete(limits = order_outputs) +
+    theme_classic()
+
+get_colors <-
+    ggplot_build(p)
+
+get_colors$data[[2]] %>% select(label, fill) %>% distinct()
+```
+
+```{r}
+ggplot() +
+geom_curve(aes(x = 0, y = 0, xend = 1, yend = 1),
+           #color = "black", 
+           fill = "red",
+           arrow = arrow(type = "closed"))
+
 
 ```
 
