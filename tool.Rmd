@@ -9,12 +9,14 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(tidyverse)
-library(scales)
-library(ggrepel)
+#library(scales)
+#library(ggrepel)
 #library(stringr)
 #library(lazyeval)
 
-get_file <- read_file("trump staff vs obama.R")
+file_name <- "test.Rmd"
+
+get_file <- read_file(file_name)
 
 make_edits <-
     get_file %>% 
@@ -29,9 +31,23 @@ make_edits <-
     str_replace_all("(\\+)[ \r\n]+", "\\1 ") %>% #ggplot pipe
     str_replace_all("([\\{\\(]+)[ \r\n]+", "\\1 ") %>% #open bracket/parens
     str_replace_all("[ \r\n]+([\\}\\)]+)", "\\1 ") #move close bracket/parens up
-    
+
+
+n_open <- 0
+output <- ""
+
+for(i in 1:nchar(make_edits)){
+        x <- str_sub(make_edits, i, i)
+        if(x == '{'){ n_open <- n_open + 1}
+        if(x == '}'){ n_open <- n_open - 1}
+        if(n_open > 0 && str_detect(x, "[\r\n]")){ 
+            x = ";"
+        }
+        output <- paste0(output, x)
+}
+
 out_file <-
-    tibble(text = read_lines(make_edits)) %>% 
+    tibble(text = read_lines(str_replace_all(output, ";+", ";"))) %>% 
     filter(str_detect(text, "<-") |
            str_detect(text, "^library")) 
 
@@ -287,22 +303,10 @@ ggplot(final_plot, aes(x = factor(step), y = is)) +
     scale_color_identity() +
     scale_fill_identity() +
     scale_y_discrete(limits = order_outputs) +
+    labs(title = paste("Analyis of", file_name), 
+         subtitle = lubridate::today(),
+         x = "step",
+         y = "") +
     theme_classic()
-
-get_colors <-
-    ggplot_build(p)
-
-get_colors$data[[2]] %>% select(label, fill) %>% distinct()
 ```
-
-```{r}
-ggplot() +
-geom_curve(aes(x = 0, y = 0, xend = 1, yend = 1),
-           #color = "black", 
-           fill = "red",
-           arrow = arrow(type = "closed"))
-
-
-```
-
 
