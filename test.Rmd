@@ -28,6 +28,10 @@ over_5 <- function(x) {
     x > 5
 }
 
+for(i in 1:nrow(models)) {
+     print(models$n[i] %% 3)
+}
+
 models$over_5 <- over_5(models$n)
 
 edit_models <-
