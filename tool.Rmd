@@ -7,12 +7,17 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+Known limitations
+- for loops
+    - at all
+    - convert all '<-' to '=' exception '<<-'
+- sf objects (needs to test)
+- automate lists of items captured 
+    - order_inputs
+    - order_outputs
+
 ```{r}
 library(tidyverse)
-#library(scales)
-#library(ggrepel)
-#library(stringr)
-#library(lazyeval)
 
 file_name <- "test.Rmd"
 
@@ -48,8 +53,7 @@ for(i in 1:nchar(make_edits)){
 
 out_file <-
     tibble(text = read_lines(str_replace_all(output, ";+", ";"))) %>% 
-    filter(str_detect(text, "<-") |
-           str_detect(text, "^library")) 
+    filter(str_detect(text, "<-|^library|^for\\("))
 
 file_details <-
     out_file %>% 
@@ -72,7 +76,7 @@ make_file <-
 write_file(make_file, "output.R")
 ```
   
-  
+
 ```{r}
 parse_it <- function(get_line){
     #run the line
@@ -121,9 +125,9 @@ parse_it <- function(get_line){
     #pattern to identify single column manipulation
         assignment_pattern <- "^\\w+\\$\\w+ \\<-" #ex: "mpg$cyl <- 2"
         
-    #use mutate
+    #single column
     if(str_detect(file_details$text[get_line], assignment_pattern)){
-            file_details$is[get_line] <<- "use mutate?"
+            file_details$is[get_line] <<- "single column"
     
             df <-
                 tibble(step = get_line,
@@ -135,6 +139,15 @@ parse_it <- function(get_line){
                            final = "obj dependency")
                     )
 
+    #loops            
+    } else if(str_detect(file_details$text[get_line], "^for|^while")){
+        file_details$is[get_line] <<- "loop"
+        
+        df <-
+            tibble(step = get_line,
+                   text = paste(str_extract(file_details$text[get_line], '\\w+'), "loop"),
+                   final = "loop")
+    
     #libraries            
     } else if(str_detect(file_details$text[get_line], "^library")){
         file_details$is[get_line] <<- "library"
@@ -216,7 +229,7 @@ for(i in 2:nrow(file_details)){
 prep_plot <-
     parse_df %>% 
     mutate(obj = ifelse(str_detect(final, "obj"), "obj", final),
-           plot = ifelse(str_detect(final, "lib|obj|func"), "plot", "detail")) %>% 
+           plot = ifelse(str_detect(final, "lib|obj|func|loop"), "plot", "detail")) %>% 
     group_by(step) %>% 
     mutate(dir = ifelse(row_number() == 1, "output", "input")) %>% 
     ungroup()
@@ -238,16 +251,16 @@ get_inputs <-
     
 
 order_outputs <- 
-    c("library", "list", "constant", "function", "table", "use mutate?", "unused") %>%
+    c("list", "loop", "constant", "function", "table", "single column", "unused", "library") %>%
     .[. %in% file_details$is]
 
 order_inputs <- 
-    as.character(c("list", "constant", "function", "table", "unused")) %>%
+    as.character(c("list", "loop", "constant", "function", "table", "unused")) %>%
     .[. %in% get_inputs$input_is]
 
 
 final_plot <-
-    get_outputs%>% 
+    get_outputs %>% 
     full_join(get_inputs, by = "step") %>% 
     left_join(file_details %>% select(step = line, detail = text, is)) %>% 
     mutate(is = factor(is, ordered = T) %>% fct_relevel(order_outputs),
@@ -257,17 +270,19 @@ final_plot <-
                          is == "constant" ~ "skyblue1",
                          is == "table" ~ "turquoise3",
                          is == "function" ~ "violet",
-                         is == "use mutate?" ~ "chocolate1",
-                         is == "list" ~ "grey75",
-                         TRUE ~ "grey75")) %>% 
+                         is == "single column" ~ "chocolate1",
+                         is == "loop" ~ "grey85",
+                         is == "list" ~ "grey85",
+                         TRUE ~ "grey85")) %>% 
     mutate(input_is_color = 
                case_when(input_is == "library" ~ "khaki1",
                          input_is == "constant" ~ "skyblue1",
                          input_is == "table" ~ "turquoise3",
                          input_is == "function" ~ "violet",
-                         input_is == "use mutate?" ~ "chocolate1",
-                         input_is == "list" ~ "grey75",
-                         TRUE ~ "grey75"))
+                         input_is == "single column" ~ "chocolate1",
+                         input_is == "loop" ~ "grey85",
+                         input_is == "list" ~ "grey85",
+                         TRUE ~ "grey85"))
         
 get_curve <-
     final_plot %>% 
@@ -275,10 +290,11 @@ get_curve <-
     mutate(curve = ifelse((input_is == "table"), "up", "down"))
 
 #p <-
-ggplot(final_plot, aes(x = factor(step), y = is)) +
+ggplot(final_plot, aes(x = (step), y = is)) +
     #geom_count() +
+    #geom_segment(aes(xend = step, yend = order_outputs[1], color = is_color), size = 10, alpha = .2) +
     geom_curve(data = filter(get_curve, curve == "up"),
-               aes(x = factor(input_step), y = input_is, 
+               aes(x = (input_step), y = input_is, 
                    xend = step, yend = is,
                    color = input_is_color),
                curvature = -0.25,
@@ -286,7 +302,7 @@ ggplot(final_plot, aes(x = factor(step), y = is)) +
                #arrow = arrow(length = unit(0.2, "cm"), type = "open"),
                size = 1) +
     geom_curve(data = filter(get_curve, curve == "down"),
-               aes(x = factor(input_step), y = input_is, 
+               aes(x = (input_step), y = input_is, 
                    xend = step, yend = is,
                    color = input_is_color),
                curvature = 0.25,
@@ -295,7 +311,8 @@ ggplot(final_plot, aes(x = factor(step), y = is)) +
                size = 1) +
     geom_label(data = distinct(final_plot, output, is, step, is_color),
                aes(label = output, fill = is_color),
-               nudge_x = -0.1, nudge_y = 0.1, #alpha = 0.9,
+               #nudge_x = -0.1, 
+               nudge_y = 0.1, #alpha = 0.9,
                label.padding = unit(0.4, "lines")) +
     #geom_label(aes(label = output, color = is), vjust = 0.1, hjust = -0.1) +
     #expand_limits(x = c(-0.5, nrow(file_details) + 2)) +
@@ -303,8 +320,11 @@ ggplot(final_plot, aes(x = factor(step), y = is)) +
     scale_color_identity() +
     scale_fill_identity() +
     scale_y_discrete(limits = order_outputs) +
+    scale_x_continuous(limits = c(0.5, nrow(file_details) * 1.1), 
+                       breaks = seq_len(nrow(file_details)),
+                       labels = seq_len(nrow(file_details))) +
     labs(title = paste("Analyis of", file_name), 
-         subtitle = lubridate::today(),
+         subtitle = paste(lubridate::today(), "\n"),
          x = "step",
          y = "") +
     theme_classic()
