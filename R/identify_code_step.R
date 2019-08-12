@@ -1,5 +1,6 @@
 #' Title
-#'
+#' 
+#' @param code_details df of code to run through
 #' @param get_line step number from code_df
 #'
 #' @importFrom tibble tibble as_tibble

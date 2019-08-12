@@ -4,9 +4,11 @@
 \alias{identify_code_step}
 \title{Title}
 \usage{
-identify_code_step(get_line)
+identify_code_step(code_details, get_line)
 }
 \arguments{
+\item{code_details}{df of code to run through}
+
 \item{get_line}{step number from code_df}
 }
 \description{
