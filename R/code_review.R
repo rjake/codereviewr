@@ -1,57 +1,91 @@
-code_review <- function(...) {
+#' Prep dataframe to plot
+#'
+#' @param ... file path, passed to code_to_df()
+#'
+#' @importFrom dplyr mutate group_by ungroup row_number
+#' @importFrom stringr str_detect str_remove_all
+#' @importFrom purrr map_dfr
+#' @export
+#'
+#' @examples
+prep_plot <- function(...) {
   code_details <-
-    code_to_df(...) %>%
-    mutate(line = row_number()) %>%
+    #code_to_df("inst/test.Rmd") %>%
+    code_to_df(...) %>% 
     mutate(
       creation =
-        ifelse(str_detect(raw, "\\<\\-"),
-          str_replace(raw, "(.*) \\<\\-.*", "is(\\1)"),
+        ifelse(
+          str_detect(raw, "\\<-"),
+          str_remove_all(raw, "\\n") %>% 
+            str_remove_all(" \\<-.*") %>% 
+            paste0("is(", ., ")"),
           NA
-        ),
-      is = ""
+        )
     )
 
   parse_df <- map_dfr(1:nrow(code_details), identify_code_step)
-  
-  prep_plot <-
-    parse_df %>% 
-    mutate(obj = ifelse(str_detect(final, "obj"), "obj", final),
-           plot = ifelse(str_detect(final, "lib|obj|func|loop"), "plot", "detail")) %>% 
+
+  parse_df %>% 
+    mutate(
+      obj = ifelse(str_detect(final, "obj"), "obj", final),
+      plot = ifelse(str_detect(final, "lib|obj|func|loop"), "plot", "detail")
+    ) %>% 
     group_by(step) %>% 
     mutate(dir = ifelse(row_number() == 1, "output", "input")) %>% 
     ungroup()
+}  
+
+
+#' Create chart of dependencies
+#'
+#' @param ... file path, passed to code_to_df()
+#' 
+#' @importFrom dplyr group_by slice ungroup mutate select filter left_join rename full_join contains case_when rowwise
+#' @importFrom stringr str_detect str_remove_all
+#' @importFrom ggplot2 ggplot aes geom_curve geom_label scale_color_identity scale_fill_identity scale_y_continuous scale_x_continuous labs theme_classic
+#' @export
+#'
+#' @examples
+plot_output <- function(...) {
+  plot_df <- prep_plot(...)
   
-  prep_plot
+  step_is <-
+    plot_df %>% 
+    group_by(step) %>% 
+    slice(1) %>% 
+    ungroup() %>% 
+    mutate(is = str_remove_all(final, ".* | ")) %>% 
+    #left_join(code_to_df("inst/test.Rmd")) %>% 
+    select(step, is)
   
   get_outputs <-
-    prep_plot %>% 
+    plot_df %>% 
     filter(dir == "output") %>%
-    select(step, output = text, create = obj)
+    select(step, output = text, create = obj) %>% 
+    left_join(step_is %>% select(step, is))
   
   get_inputs <-
-    prep_plot %>% 
+    plot_df %>% 
     filter(dir == "input",
            plot == "plot") %>% 
     select(step, input = text, type = obj) %>% 
     left_join(get_outputs %>% select(input = output, input_step = step)) %>% 
-    left_join(code_details %>% select(input_step = line, input_detail = text, input_is = is))
+    left_join(step_is %>% rename(input_step = step, input_is = is))
   
   
-  order_outputs <- 
-    c("list", "loop", "constant", "function", "table", "single column", "unused", "library") %>%
-    .[. %in% code_details$is]
-  
-  order_inputs <- 
-    as.character(c("list", "loop", "constant", "function", "table", "unused")) %>%
-    .[. %in% get_inputs$input_is]
-  
+  object_types <- c(
+    "list", "loop", "constant", "function", "table", "column", "unused", "library", "NA"
+  )
   
   final_plot <-
     get_outputs %>% 
     full_join(get_inputs, by = "step") %>% 
-    left_join(code_details %>% select(step = line, detail = text, is)) %>% 
-    mutate(is = factor(is, ordered = T) %>% fct_relevel(order_outputs),
-           input_is = factor(input_is, ordered = T) %>% fct_relevel(order_inputs)) %>% 
+    #left_join(step_is, by = "step") %>% 
+    select(step, output, is, contains("input")) %>% 
+    # mutate(
+    #   is = factor(is) %>% fct_relevel(object_types),
+    #   input_is = factor(input_is) %>% fct_relevel(object_types)
+    # ) %>% 
     mutate(is_color = 
              case_when(is == "library" ~ "khaki1",
                        is == "constant" ~ "skyblue1",
@@ -69,14 +103,21 @@ code_review <- function(...) {
                        input_is == "single column" ~ "chocolate1",
                        input_is == "loop" ~ "grey85",
                        input_is == "list" ~ "grey85",
-                       TRUE ~ "grey85"))
+                       TRUE ~ "grey85")) %>% 
+    rowwise() %>% 
+    mutate(
+      is = which(object_types == is),
+      input_is = ifelse(is.na(input_is), NA, which(object_types == input_is))
+    ) %>% 
+    ungroup()
   
   get_curve <-
     final_plot %>% 
     filter(step != input_step) %>% 
     mutate(curve = ifelse((input_is == "table"), "up", "down"))
   
-  ggplot(final_plot, aes(x = (step), y = is)) +
+  
+  ggplot(final_plot, aes(x = step, y = is)) +
     geom_curve(data = filter(get_curve, curve == "up"),
                aes(x = (input_step), y = input_is, 
                    xend = step, yend = is,
@@ -94,12 +135,12 @@ code_review <- function(...) {
                nudge_y = 0.1, label.padding = unit(0.4, "lines")) +
     scale_color_identity() +
     scale_fill_identity() +
-    scale_y_discrete(limits = order_outputs) +
+    scale_y_continuous(breaks = seq_along(object_types), labels = object_types) +
     scale_x_continuous(limits = c(0.5, nrow(code_details) * 1.1), 
                        breaks = seq_len(nrow(code_details)),
                        labels = seq_len(nrow(code_details))) +
-    labs(title = paste("Analyis of", file_name), 
-         subtitle = paste(lubridate::today(), "\n"),
+    labs(#title = paste("Analyis of", ...), 
+         subtitle = paste(as.Date(Sys.time()), "\n"),
          x = "step",
          y = "") +
     theme_classic()
