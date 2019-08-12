@@ -14,7 +14,7 @@ A data frame of all assignments and libraries
 }
 \examples{
 \dontrun{
-file <- system.file(package = "codereviewr", "R/test.R") \%>\% 
+system.file(package = "codereviewr", "R/test.R") \%>\% 
  code_to_df()
 }
 }
