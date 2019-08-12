@@ -7,7 +7,7 @@
 code_to_df(file)
 }
 \arguments{
-\item{file}{}
+\item{file}{file to evaluate, if missing, a window will open to select file}
 }
 \description{
 A data frame of all assignments and libraries

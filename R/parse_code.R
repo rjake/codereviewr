@@ -1,6 +1,6 @@
 #' Convert R code to dataframe
 #'
-#' @param file
+#' @param file file to evaluate, if missing, a window will open to select file 
 #'
 #' @description A data frame of all assignments and libraries
 #' @importFrom knitr purl
@@ -36,6 +36,7 @@ code_to_df <- function(file) {
   r_code <- as.character(parse(x))
   
   tibble(
+    step = seq_along(r_code),
     raw = trimws(r_code)
   )
 }
