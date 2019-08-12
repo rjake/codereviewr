@@ -9,7 +9,7 @@
 #'
 #' @examples
 prep_plot <- function(...) {
-  code_details <-
+  code_df <-
     #code_to_df("inst/test.Rmd") %>%
     code_to_df(...) %>% 
     mutate(
@@ -23,7 +23,7 @@ prep_plot <- function(...) {
         )
     )
 
-  parse_df <- map_dfr(1:nrow(code_details), identify_code_step)
+  parse_df <- map_dfr(1:nrow(code_df), identify_code_step, code_details = code_df)
 
   parse_df %>% 
     mutate(
@@ -136,9 +136,9 @@ plot_output <- function(...) {
     scale_color_identity() +
     scale_fill_identity() +
     scale_y_continuous(breaks = seq_along(object_types), labels = object_types) +
-    scale_x_continuous(limits = c(0.5, nrow(code_details) * 1.1), 
-                       breaks = seq_len(nrow(code_details)),
-                       labels = seq_len(nrow(code_details))) +
+    scale_x_continuous(limits = c(0.5, max(final_plot$step) * 1.1), 
+                       breaks = 1:max(final_plot$step),
+                       labels = 1:max(final_plot$step)) +
     labs(#title = paste("Analyis of", ...), 
          subtitle = paste(as.Date(Sys.time()), "\n"),
          x = "step",
