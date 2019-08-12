@@ -3,10 +3,9 @@ title: "Untitled"
 output: html_document
 ---
 
-##
-When you 
+Some test text
 
-```{r cars}
+```{r}
 library(tidyverse)
 
 model_name <- "pickup"
@@ -38,7 +37,15 @@ edit_models <-
     models %>% 
     mutate(over_10 = over_5(n/2))
 
-#p <- paste0("here is one string of text", fn, "another string of text")
+#
+p <- 
+  paste0(
+    "here is one string of text, the result of over_5()", 
+    over_5(2), 
+    ", another string of text"
+  )
+
+print(p)
 
 make_list <- 
     list(edit_models$model_new,
@@ -53,5 +60,3 @@ You can also embed plots, for example:
 ```{r pressure, echo=FALSE}
 plot(pressure)
 ```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
