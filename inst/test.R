@@ -13,6 +13,7 @@ df <-
   ungroup() %>% 
   mutate(manufacturer = fct_reorder(manufacturer, n_distinct_model))
   
+df$test <- FALSE
 
 df %>% 
   ggplot(aes(manufacturer, n_distinct_model)) +
