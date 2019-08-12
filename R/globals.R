@@ -1,0 +1,24 @@
+utils::globalVariables(
+  c(
+    #"code_details",
+    "pkg",
+    "fx",
+    ".",
+    "text",
+    "step",
+    "parent",
+    "terminal",
+    "token",
+    "final",
+    "is",
+    "obj",
+    "plot",
+    "output",
+    "input_is",
+    "input_step",
+    "curve",
+    "input_is_color",
+    "is_color",
+    "unit"
+    )
+)
