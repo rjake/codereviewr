@@ -1,3 +1,15 @@
+#' Title
+#'
+#' @param get_line step number from code_df
+#'
+#' @importFrom tibble tibble as_tibble
+#' @importFrom dplyr filter rowwise mutate ungroup distinct case_when select row_number
+#' @importFrom stringr str_detect str_extract_all str_replace str_extract
+#' @importFrom tidyr unnest
+#' @importFrom utils capture.output getParseData ls.str lsf.str
+#' @export
+#'
+#' @examples
 identify_code_step <- function(get_line) {
   # run the line
   x <- parse(text = code_details$raw[get_line])
@@ -51,13 +63,11 @@ identify_code_step <- function(get_line) {
 
   # single column
   if (str_detect(code_details$raw[get_line], assignment_pattern)) {
-    code_details$is[get_line] <<- "single column"
-
     df <-
       tibble(
         step = get_line,
         text = str_extract(code_details$raw[get_line], "\\w+\\$\\w+"),
-        final = "single column manipulation"
+        final = "manipulation single column"
       ) %>%
       rbind(
         tibble(
@@ -69,8 +79,6 @@ identify_code_step <- function(get_line) {
 
     # loops
   } else if (str_detect(code_details$raw[get_line], "^for|^while")) {
-    code_details$is[get_line] <<- "loop"
-
     df <-
       tibble(
         step = get_line,
@@ -80,8 +88,6 @@ identify_code_step <- function(get_line) {
 
     # libraries
   } else if (str_detect(code_details$raw[get_line], "^library")) {
-    code_details$is[get_line] <<- "library"
-
     df <-
       tibble(
         step = get_line,
@@ -91,8 +97,6 @@ identify_code_step <- function(get_line) {
 
     # functions
   } else if (str_detect(code_details$raw[get_line], "\\<- function\\(")) {
-    code_details$is[get_line] <<- "function"
-
     df <-
       tibble(
         step = get_line,
@@ -111,7 +115,7 @@ identify_code_step <- function(get_line) {
       get_type %>%
       paste0(collapse = "|")
 
-    code_details$is[get_line] <<-
+    is_x <-
       case_when(
         str_detect(x, "^list") ~ "list",
         str_detect(x, "tbl|DT") ~ "table",
@@ -123,7 +127,7 @@ identify_code_step <- function(get_line) {
       getParseData(
         parse(text = code_details$raw[get_line])
       ) %>%
-      as.tibble() %>%
+      as_tibble() %>%
       mutate(step = get_line) %>%
       select(step, parent:text) %>%
       filter(
@@ -135,7 +139,7 @@ identify_code_step <- function(get_line) {
       mutate(
         final =
           case_when(
-            row_number() == 1 ~ "new object",
+            row_number() == 1 ~ paste("new object | ", is_x),
             str_detect(token, "SUB") ~ "new column",
             text %in% get_fx_pkg ~ "from libary",
             text %in% get_fx_local ~ "local function",
