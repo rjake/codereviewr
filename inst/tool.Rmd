@@ -19,7 +19,7 @@ Known limitations
 ```{r}
 library(tidyverse)
 
-file_name <- "test.Rmd"
+file_name <- "inst/test.Rmd"
 
 get_file <- read_file(file_name)
 
@@ -73,7 +73,7 @@ make_file <-
     paste0(out_file$text, collapse = "\r\n") %>% 
     paste("\r\n")
     
-write_file(make_file, "output.R")
+#write_file(make_file, "output.R")
 ```
   
 
