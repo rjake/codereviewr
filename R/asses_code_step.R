@@ -10,8 +10,7 @@
 #' @importFrom utils capture.output getParseData ls.str lsf.str
 #' @export
 #'
-#' @examples
-identify_code_step <- function(code_details, get_line) {
+asses_code_step <- function(code_details, get_line) {
   
   # run the line
   x <- parse(text = code_details$raw[get_line])
