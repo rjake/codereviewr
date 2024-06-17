@@ -5,17 +5,17 @@ library(tidyverse)
 raw_data <- mpg
 
 df <-
-  raw_data %>% 
-  group_by(manufacturer) %>% 
+  raw_data  
+  group_by(manufacturer)  
   summarise(
     n_distinct_model = n_distinct(model)
-  ) %>% 
-  ungroup() %>% 
+  )  
+  ungroup()  
   mutate(manufacturer = fct_reorder(manufacturer, n_distinct_model))
   
 df$test <- FALSE
 
-df %>% 
+df  
   ggplot(aes(manufacturer, n_distinct_model)) +
   geom_col() +
   coord_flip()

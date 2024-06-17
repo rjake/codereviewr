@@ -6,7 +6,6 @@
 #' @importFrom tidyr separate_longer_delim
 #' @importFrom stringr str_detect str_remove_all
 #' @importFrom ggplot2 ggplot aes geom_point geom_curve geom_label unit scale_color_identity scale_fill_identity scale_y_continuous scale_x_continuous labs theme_classic
-#' @importFrom forcats fct_reorder
 #' @importFrom purrr map map_int
 #' @export
 #' @examples
@@ -23,8 +22,8 @@
 #' 
 plot_code_details <- function(code_lineage) {
   object_as_factor <- 
-    fct_inorder(df$object_name) |> 
-    fct_rev() |> 
+    forcats::fct_inorder(code_lineage$object_name) |> 
+    forcats::fct_rev() |> 
     levels()
   
   df <- 
@@ -54,14 +53,14 @@ plot_code_details <- function(code_lineage) {
       #   ),
       # everything
       df |> 
-        drop_na(used_object_name) |> 
+        #drop_na(used_object_name) |> 
         filter(
-          !str_detect(used_object_name, "branch|collapse|label|regex|shorten"),
+          !str_detect(used_object_name, "branch|collapse|label|regex|shorten|^x$"),
           #!str_detect("^(asset|table)_node_stats|all_deps$")
         ) |>
         dplyr::transmute(
-          source = object_name,
-          target = used_object_name,
+          target = object_name,
+          source = used_object_name,
           group = "steps"
         )
       ,
@@ -111,8 +110,9 @@ plot_code_details <- function(code_lineage) {
     arrows = TRUE,
     charge = -300,
     fontSize = 15,
-    colourScale = networkD3::JS('d3.scaleOrdinal(["grey", "purple", "orange"]);'),
+    colourScale = networkD3::JS('d3.scaleOrdinal(["blue", "grey", "orange"]);'),
     linkColour = "#999999",
+    
     linkDistance = 100,
     #nodeColour = "black",
     opacity = 1,

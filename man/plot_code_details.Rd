@@ -4,7 +4,7 @@
 \alias{plot_code_details}
 \title{Create chart of dependencies}
 \usage{
-plot_code_details(code_steps)
+plot_code_details(code_lineage)
 }
 \arguments{
 \item{...}{file path, passed to code_to_df()}
@@ -13,10 +13,15 @@ plot_code_details(code_steps)
 Create chart of dependencies
 }
 \examples{
-code_steps <- 
+code_lineage <- 
   code_to_df(file) |> 
-  identify_code_steps(!str_detect(object, "^(board|branch|collapse|env|find|label|node_1|regex|shorten)"))
+  identify_code_steps() |>
+  track_lineage(
+    operation_types = c("assignment", "update"), 
+    object_type_exclusion = c("function", "constant"),
+    code_exclusion_regex = "<- (switch|system)|^board"
+  )
   
-plot_code_details(code_steps)
+plot_code_details(code_lineage)
 
 }

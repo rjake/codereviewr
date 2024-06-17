@@ -45,7 +45,7 @@ code_to_df <- function(file) {
 #' Identify what is happening in code step
 #'
 #' @param code_df parsed data from code_to_df()
-#' @importFrom dplyr mutate row_number na_if select
+#' @importFrom dplyr mutate row_number na_if select relocate
 #' @importFrom tidyr drop_na
 #' @importFrom stringr str_detect str_replace_all str_extract
 #' @importFrom purrr map2_chr keep
@@ -121,7 +121,7 @@ identify_code_steps <- function(code_df, ...) {
     relocate(raw_code, .after = everything())
 }
 
-#' @importFrom dplyr group_by slice ungroup mutate select filter left_join rename full_join contains case_when rowwise summarise
+#' @importFrom dplyr group_by slice ungroup mutate select filter left_join rename full_join contains case_when rowwise summarise join_by relocate
 #' @importFrom tidyr separate_longer_delim
 #' @examples
 #' code_steps <- 
@@ -155,7 +155,7 @@ track_lineage <- function(code_steps,
     df <- 
       df |> 
       filter(operation %in% operation_types) |> 
-      mutate(step = row_number())
+      mutate(step = row_number()) 
   }
   
   if (!is.null(object_type_exclusion)) {
@@ -174,6 +174,9 @@ track_lineage <- function(code_steps,
   
   df |> 
     separate_longer_delim(used_object_name, ",") |> 
+    mutate(
+      used_object_name = ifelse(!used_object_name %in% df$object_name, NA, used_object_name)
+    ) |> 
     filter(
       # remove any objects that were excluded with above if statements
       is.na(used_object_name) | used_object_name %in% df$object_name

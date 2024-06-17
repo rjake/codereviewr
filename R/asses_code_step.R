@@ -19,28 +19,28 @@ asses_code_step <- function(code_details, get_line) {
 
   # identify functions
   get_fx_pkg <-
-    tibble(pkg = search()) %>%
-    filter(str_detect(pkg, "package")) %>%
-    rowwise() %>%
-    mutate(fx = list(as.character(ls.str(pkg)))) %>%
-    ungroup() %>%
-    unnest(fx) %>%
-    filter(str_detect(tolower(fx), "^[a-z]")) %>%
-    distinct(fx) %>%
-    .$fx # mutate(src = "pkg")
+    tibble(pkg = search()) |>
+    filter(str_detect(pkg, "package")) |>
+    rowwise() |>
+    mutate(fx = list(as.character(ls.str(pkg)))) |>
+    ungroup() |>
+    unnest(fx) |>
+    filter(str_detect(tolower(fx), "^[a-z]")) |>
+    distinct(fx) |>
+    pull(fx) # mutate(src = "pkg")
 
   get_fx_local <-
-    tibble(fx = list(as.character(lsf.str(search())))) %>%
-    unnest(fx) %>%
-    .$fx # mutate(src = "local")
+    tibble(fx = list(as.character(lsf.str(search())))) |>
+    unnest(fx) |>
+    pull(fx) # mutate(src = "local")
 
   # get_fx <- c(get_fx_pkg, get_fx_local)
 
   get_objects <-
-    tibble(obj = list(as.character(ls.str(search())))) %>%
-    unnest(obj) %>%
-    filter(!obj %in% get_fx_local) %>%
-    .$obj
+    tibble(obj = list(as.character(ls.str(search())))) |>
+    unnest(obj) |>
+    filter(!obj %in% get_fx_local) |>
+    pull(obj)
 
   # make dataframe of found functions
   local_fx_list <- paste0(paste0(get_fx_local, "\\("), collapse = "|")
@@ -53,9 +53,9 @@ asses_code_step <- function(code_details, get_line) {
         step = get_line,
         text = (str_extract_all(code_details$raw[get_line], local_fx_list)),
         final = "local function"
-      ) %>%
-      rowwise() %>%
-      unnest(text) %>%
+      ) |>
+      rowwise() |>
+      unnest(text) |>
       mutate(text = str_replace(text, "\\(", ""))
   }
 
@@ -69,7 +69,7 @@ asses_code_step <- function(code_details, get_line) {
         step = get_line,
         text = str_extract(code_details$raw[get_line], "\\w+\\$\\w+"),
         final = "manipulation single column"
-      ) %>%
+      ) |>
       rbind(
         tibble(
           step = get_line,
@@ -113,7 +113,7 @@ asses_code_step <- function(code_details, get_line) {
       eval(parse(text = code_details$creation[get_line]))
 
     x <-
-      get_type %>%
+      get_type |>
       paste0(collapse = "|")
 
     is_x <-
@@ -127,16 +127,16 @@ asses_code_step <- function(code_details, get_line) {
     df <-
       getParseData(
         parse(text = code_details$raw[get_line])
-      ) %>%
-      as_tibble() %>%
-      mutate(step = get_line) %>%
-      select(step, parent:text) %>%
+      ) |>
+      as_tibble() |>
+      mutate(step = get_line) |>
+      select(step, parent:text) |>
       filter(
         terminal == T,
         str_detect(token, "SYMBOL")
-      ) %>%
-      filter((!str_detect(token, "SYMBOL_FUNCTION_CALL") | text %in% get_fx_local)) %>%
-      # group_by(text) %>% mutate(first = first(token)) %>% ungroup() %>%
+      ) |>
+      filter((!str_detect(token, "SYMBOL_FUNCTION_CALL") | text %in% get_fx_local)) |>
+      # group_by(text) |> mutate(first = first(token)) |> ungroup() |>
       mutate(
         final =
           case_when(
@@ -148,9 +148,9 @@ asses_code_step <- function(code_details, get_line) {
             text %in% get_objects ~ "obj dependency",
             TRUE ~ ""
           )
-      ) %>%
-      filter(final != "") %>%
-      select(step, text, final) %>%
+      ) |>
+      filter(final != "") |>
+      select(step, text, final) |>
       distinct()
   }
 
